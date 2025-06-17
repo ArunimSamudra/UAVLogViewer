@@ -18,7 +18,15 @@
         <EkfHelperTool  @close="state.showEkfHelper = false" v-if="state.showEkfHelper"></EkfHelperTool>
         <div class="container-fluid" style="height: 100%; overflow: hidden;">
 
-            <sidebar/>
+            <sidebar @file-uploaded="onFileUploaded" @upload-error="onUploadError">
+                <template #chat>
+                    <div class="chat-outer-container" style="width: 100%; height: 100%; display: flex; flex-direction: column;">                        
+                        <div class="chat-window" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
+                            <Chat ref="chat" :session-id="sessionId"/>
+                        </div>
+                    </div>
+                </template>
+            </sidebar>
 
             <main class="col-md-9 ml-sm-auto col-lg-10 flex-column d-sm-flex" role="main">
 
@@ -31,7 +39,7 @@
                 </div>
                 <div class="row" v-bind:class="[state.plotOn ? 'h-50' : 'h-100']"
                      v-if="state.mapAvailable && mapOk && state.showMap">
-                    <div class="col-12 noPadding">
+                    <div class="col-12 noPadding" style="display: block;">
                         <CesiumViewer ref="cesiumViewer"/>
                     </div>
                 </div>
@@ -60,12 +68,17 @@ import { MavlinkDataExtractor } from '../tools/mavlinkDataExtractor'
 import { DjiDataExtractor } from '../tools/djiDataExtractor'
 import MagFitTool from '@/components/widgets/MagFitTool.vue'
 import EkfHelperTool from '@/components/widgets/EkfHelperTool.vue'
+import Chat from '@/components/Chat.vue'
 import Vue from 'vue'
 
 export default {
     name: 'Home',
     created () {
         this.$eventHub.$on('messagesDoneLoading', this.extractFlightData)
+        // Also listen for global file-uploaded in case sidebar re-emit fails
+        this.$root.$on('file-uploaded', this.onFileUploaded)
+        this.$root.$on('upload-error', this.onUploadError)
+
         this.state.messages = {}
         this.state.timeAttitude = []
         this.state.timeAttitudeQ = []
@@ -77,6 +90,7 @@ export default {
     },
     data () {
         return {
+            sessionId: null,
             state: store,
             dataExtractor: null
         }
@@ -226,7 +240,56 @@ export default {
                 this.state.colors.push(new Color(rgba[0], rgba[1], rgba[2]))
                 // this.translucentColors.push(new Cesium.Color(rgba[0], rgba[1], rgba[2], 0.1))
             }
-        }
+        },
+        onFileUploaded(data) {
+            console.log('Home.vue - File uploaded event received:', data);
+            if (!data) {
+                console.error('Home.vue - Received empty data in onFileUploaded');
+                return;
+            }
+            
+            // Show success toast
+            this.$bvToast.toast('File uploaded successfully!', {
+                title: 'Success',
+                variant: 'success',
+                solid: true,
+                autoHideDelay: 3000
+            });
+            
+            // Add the API response message to the chat
+            if (data.message && this.$refs.chat) {
+                console.log('Home.vue - Adding message to chat:', data.message);
+                this.$refs.chat.addMessage({
+                    content: data.message,
+                    role: 'assistant',
+                    timestamp: new Date().toLocaleTimeString()
+                });
+                this.sessionId = data.sessionId;
+            }
+        },
+        
+        onUploadError(error) {
+            console.error('Upload error:', error);
+            const errorMessage = error.message || 'Failed to upload file';
+            
+            // Show an error message to the user
+            this.$bvToast.toast(errorMessage, {
+                title: 'Upload Error',
+                variant: 'danger',
+                solid: true,
+                autoHideDelay: 5000
+            });
+            
+            // Add the error message to the chat
+            if (this.$refs.chat) {
+                this.$refs.chat.addMessage({
+                    content: `Error: ${errorMessage}`,
+                    role: 'assistant',
+                    timestamp: new Date().toLocaleTimeString(),
+                    isError: true
+                });
+            }
+        },
     },
     components: {
         Sidebar,
@@ -239,7 +302,8 @@ export default {
         DeviceIDViewer,
         AttitudeViewer,
         MagFitTool,
-        EkfHelperTool
+        EkfHelperTool,
+        Chat
     },
     computed: {
         mapOk () {
@@ -273,10 +337,10 @@ export default {
         font-family: 'Montserrat', sans-serif;
         content: "\f078";
         display: inline-block;
-        padding-left: 10px;
-        padding-right: 10px;
-        vertical-align: middle;
-        float: right;
+        padding: 0 10px;
+        margin-left: auto;
+        display: flex;
+        align-items: center;
     }
 
     body {

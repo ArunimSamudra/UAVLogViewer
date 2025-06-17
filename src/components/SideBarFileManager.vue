@@ -152,14 +152,23 @@ export default {
             this.state.processPercentage = 100
             this.file = file
             const reader = new FileReader()
-            reader.onload = function (e) {
+            reader.onload = async (e) => {
                 const data = reader.result
+                // First process the file locally
                 worker.postMessage({
                     action: 'parse',
                     file: data,
                     isTlog: (file.name.endsWith('tlog')),
                     isDji: (file.name.endsWith('txt'))
                 })
+                
+                // Then upload to the API
+                try {
+                    await this.uploadToApi();
+                } catch (error) {
+                    console.error('Error uploading to API:', error);
+                    // The error is already handled in uploadToApi, so we don't need to do anything here
+                }
             }
             this.state.logType = file.name.endsWith('tlog') ? 'tlog' : 'bin'
             if (file.name.endsWith('.txt')) {
@@ -194,6 +203,49 @@ export default {
             , false)
             request.open('POST', '/upload')
             request.send(formData)
+            
+            // Also upload to the API in parallel
+            this.uploadToApi();
+        },
+        
+        // New method for API upload
+        async uploadToApi() {
+            console.log('Uploading to API...')
+            const formData = new FormData();
+            formData.append('file', this.file);
+            
+            try {
+                const response = await fetch('http://0.0.0.0:8000/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log("Upload chatbot file", data);
+                // Emit event with session ID and message
+                const payload = {
+                    message: data.message,  // Show this in chat
+                    role: 'assistant',
+                    timestamp: new Date().toLocaleTimeString(),
+                    sessionId: data.session_id
+                };
+                // Emit locally (for Sidebar)
+                this.$emit('file-uploaded', payload);
+                // ALSO broadcast globally so Home.vue can still receive even if this component is unmounted
+                this.$root.$emit('file-uploaded', payload);
+                
+            } catch (error) {
+                console.error('Error uploading to API:', error);
+                const errorPayload = { message: 'Failed to process file with AI. Please try again.' };
+                this.$emit('upload-error', errorPayload);
+                this.$root.$emit('upload-error', errorPayload);
+            } finally {
+                console.log("Upload chatbot file finally");
+            }
         },
         fixData (message) {
             if (message.name === 'GLOBAL_POSITION_INT') {

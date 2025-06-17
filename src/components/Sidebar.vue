@@ -33,7 +33,10 @@
                     <message-menu/>
                 </div>
                 <div v-if="selected==='home'">
-                    <Dropzone/>
+                    <Dropzone 
+                        @file-uploaded="onFileUploaded"
+                        @upload-error="onUploadError"
+                    />
                     <span class="buildinfo">Commit {{state.commit}}</span>
                     <span class="buildinfo">Built {{state.buildDate}}</span>
                 </div>
@@ -124,6 +127,10 @@
                     </div>
                 </div>
             </b-collapse>
+            <!-- Chat slot will be rendered here -->
+            <div style="margin-top: auto; height: 70%; min-height: 0; display: flex; flex-direction: column;">
+                <slot name="chat"></slot>
+            </div>
         </div>
     </div>
 </template>
@@ -215,7 +222,15 @@ export default {
 
         downloadFile (filename) {
             this.downloadBlob(this.state.files[filename], filename, 'application/octet-stream')
-        }
+        },
+        onFileUploaded(data) {
+            // Emit the event up to the parent component (Home.vue)
+            this.$emit('file-uploaded', data);
+        },
+        onUploadError(error) {
+            // Emit the error up to the parent component (Home.vue)
+            this.$emit('upload-error', error);
+        },
     },
     created () {
         this.$eventHub.$on('set-selected', this.setSelected)
@@ -242,7 +257,7 @@ span.buildinfo {
     font-size: 70%;
     margin-left: 30px;
     display: block;
-    opacity: 50%;
+    opacity: 0.8;
 }
 
 a.section {
@@ -263,6 +278,9 @@ a.centered-section {
         overflow-x: hidden;
         padding: 0;
         background-color: rgb(29, 36, 52);
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
         background: linear-gradient(0deg, rgb(20, 25, 36) 51%, rgb(37, 47, 71) 100%);
         position: fixed !important;
         top: 0px;
@@ -290,10 +308,13 @@ a.centered-section {
     }
 
     .nav-side-menu ul .sub-menu li,
-    .nav-side-menu li .sub-menu li {
-        background-color: #181c20;
-        border: none;
-        line-height: 28px;
+    .nav-side-menu li .sub-menu-list {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding-bottom: 0;
         border-bottom: 1px solid #23282e;
         margin-left: 0px;
     }
