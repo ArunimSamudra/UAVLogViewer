@@ -248,14 +248,6 @@ export default {
                 return;
             }
             
-            // Show success toast
-            this.$bvToast.toast('File uploaded successfully!', {
-                title: 'Success',
-                variant: 'success',
-                solid: true,
-                autoHideDelay: 3000
-            });
-            
             // Add the API response message to the chat
             if (data.message && this.$refs.chat) {
                 console.log('Home.vue - Adding message to chat:', data.message);
@@ -271,14 +263,6 @@ export default {
         onUploadError(error) {
             console.error('Upload error:', error);
             const errorMessage = error.message || 'Failed to upload file';
-            
-            // Show an error message to the user
-            this.$bvToast.toast(errorMessage, {
-                title: 'Upload Error',
-                variant: 'danger',
-                solid: true,
-                autoHideDelay: 5000
-            });
             
             // Add the error message to the chat
             if (this.$refs.chat) {

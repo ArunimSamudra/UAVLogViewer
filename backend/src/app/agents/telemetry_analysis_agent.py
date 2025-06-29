@@ -44,26 +44,31 @@ class TelemetryAnalysisAgent(Agent):
         # Default fallback
         msg_types = set()
 
+        # Decide if we can reuse last message types (for follow-up)
         if self.session_store:
-            # Collect message type inference context
+            # Recompute types based on context + current query
             recent_user_msgs = [
                 m["content"]
                 for m in self.session_store.get_history(self.session_id)[-5:]
                 if m["role"] == "user"
             ]
-            combined_query = "\n".join(recent_user_msgs[-2:] + [message])
-            logger.info(f"combined_query: {combined_query}")
+            
+            # Get recent messages (up to 2) for context
+            recent_msgs_for_context = recent_user_msgs[-2:] if recent_user_msgs else []
+            combined_query = "\n".join(recent_msgs_for_context + [message])
+            logger.info(f"[infer] combined_query: {combined_query}")
 
-            # Use history + current message to infer types
-            raw_types = infer_message_types_llm(combined_query, frozenset(self.tdata.by_type.keys()))
+            recent_msgs_tuple = tuple(recent_msgs_for_context)
+            raw_types = infer_message_types_llm(message, recent_msgs_tuple, frozenset(self.tdata.by_type.keys()))
             logger.info(f"raw_types: {raw_types}")
-            msg_types = refine_types_with_llm(message, list(raw_types))  # use only current msg here for refining
+            msg_types = refine_types_with_llm(message, recent_msgs_tuple, list(raw_types))
             logger.info(f"msg_types: {msg_types}")
             self.session_store.set_last_msg_types(self.session_id, list(msg_types))
 
-    
-        # Build context from message types
-        ctx = build_context(self.tdata, msg_types) if msg_types else "No relevant telemetry data found."
+        # Fallback: handle edge cases where msg_types is empty
+        if not msg_types:
+            logger.warning("No message types detected. Proceeding with empty context.")
+        ctx = build_context(self.tdata, msg_types, self.session_id, self.session_store) if msg_types else "No relevant telemetry data found."
         
         # ---------- 1. System prompt (core persona + conversational guardrails) ----------
         system_prompt = (

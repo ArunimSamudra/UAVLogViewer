@@ -1,11 +1,12 @@
 from __future__ import annotations
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from models.telemetry_data import TelemetryData
 
 @dataclass
 class UpdatedSessionMetadata:
     last_msg_types: Optional[List[str]] = None
+    topics: Dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class Message:
@@ -20,6 +21,7 @@ class SessionStore:
         self.intents: Dict[str, str] = {}
         self.conversation_history: Dict[str, List[Message]] = {}
         self.metadata: Dict[str, UpdatedSessionMetadata] = {}
+        self.cached_contexts: Dict[str, Dict[str, str]] = {}
 
     def get_telemetry(self, session_id: str) -> TelemetryData:
         return self.telemetry.get(session_id)
@@ -33,6 +35,22 @@ class SessionStore:
 
     def get_intent(self, session_id: str) -> str:
         return self.intents.get(session_id, "unknown")
+
+    def set_topic(self, session_id: str, topic: str):
+        if session_id not in self.metadata:
+            self.metadata[session_id] = UpdatedSessionMetadata()
+        self.metadata[session_id].topics[session_id] = topic
+
+    def get_topic(self, session_id: str) -> str:
+        return self.metadata.get(session_id, UpdatedSessionMetadata()).topics.get(session_id, "")
+
+    def get_cached_context(self, session_id: str, msg_type: str) -> Optional[str]:
+        return self.cached_contexts.get(session_id, {}).get(msg_type)
+
+    def cache_context(self, session_id: str, msg_type: str, summary: str):
+        if session_id not in self.cached_contexts:
+            self.cached_contexts[session_id] = {}
+        self.cached_contexts[session_id][msg_type] = summary
     
     def set_last_msg_types(self, session_id: str, msg_types: List[str]):
         if session_id not in self.metadata:

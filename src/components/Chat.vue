@@ -15,7 +15,7 @@
       <!-- Dynamic messages -->
       <div v-for="(message, index) in messages" 
            :key="index"
-           v-if="message.role === 'user' || message.content || message.isStreaming"
+           v-if="message.role === 'user' || message.content || message.isStreaming || message.isProcessing"
            :class="[
             'message',
             message.role === 'user' ? 'user-message' : 'assistant-message',
@@ -265,8 +265,36 @@ export default {
 }
 
 .message-text {
-  white-space: 0.95rem;
-  line-height: 1.5;
+  margin: 0;
+  line-height: 1.4;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* Processing message styles */
+.message.processing .message-content {
+  opacity: 0.8;
+}
+
+.message.processing .message-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message.processing .message-text::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .user-message {

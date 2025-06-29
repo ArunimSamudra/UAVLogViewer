@@ -53,16 +53,19 @@ class AnomalyAgent(Agent):
                 for m in self.session_store.get_history(self.session_id)[-5:]
                 if m["role"] == "user"
             ]
-            combined_query = "\n".join(recent_user_msgs[-1:] + [message])
+            recent_msgs_for_context = recent_user_msgs[-2:] if recent_user_msgs else []
+            combined_query = "\n".join(recent_msgs_for_context + [message])
+            logger.info(f"[infer] combined_query: {combined_query}")
             logger.info(f"combined_query: {combined_query}")
 
-            raw_types = infer_message_types_llm(combined_query, frozenset(self.tdata.by_type.keys()))
+            recent_msgs_tuple = tuple(recent_msgs_for_context)
+            raw_types = infer_message_types_llm(message, recent_msgs_tuple, frozenset(self.tdata.by_type.keys()))
             logger.info(f"raw_types: {raw_types}")
-            msg_types = refine_types_with_llm(message, list(raw_types))
+            msg_types = refine_types_with_llm(message, recent_msgs_tuple, list(raw_types))
             logger.info(f"msg_types: {msg_types}")
             self.session_store.set_last_msg_types(self.session_id, list(msg_types))
 
-        ctx = build_context(self.tdata, msg_types) if msg_types else "No relevant telemetry data found."
+        ctx = build_context(self.tdata, msg_types, self.session_id, self.session_store) if msg_types else "No relevant telemetry data found."
 
         # ---------- System Prompt ----------
         system_prompt = (
@@ -79,14 +82,24 @@ class AnomalyAgent(Agent):
             "• Always close HTML tags properly.\n\n"
             "• Respond strictly using HTML formatting. Do not use Markdown or plain text. All bold must use <b>, italics with <i>, and new lines with <br>\n"
 
-            "### Reasoning Strategy\n"
+            "### Reasoning Strategy\n\n"
             "• Use flexible, data-driven reasoning rather than rigid thresholds.\n"
             "• Look for sudden changes, flatlines, out-of-range values, or sensor disagreement.\n"
-            "• Interpret behavior in context — distinguish minor fluctuations from concerning trends.\n"
+            "• Interpret behavior in context — distinguish minor fluctuations from concerning trends.\n\n"
+
+            "• Compare overlapping sensors for disagreement (e.g., GPS vs. IMU velocity, barometer vs. GPS altitude).\n"
+            "• Correlate anomalies with flight mode changes or pilot input (e.g., RTL, LOITER, LAND, or sudden RC spikes).\n"
+            "• Consider temporal relationships — was the anomaly sustained, momentary, or gradually worsening?\n"
+            "• Flag patterns consistent with common issues:\n"
+            "Vibration-induced clipping→ sudden Z-axis spikes followed by control instability.\n"
+            "Battery sag → sharp voltage drop with rising current and declining throttle headroom.\n"
+            "GPS loss → number of sats drops + HDOP rises + mode change to stabilize or RTL.\n"
+            "IMU drift → uncorrelated pitch/roll/acceleration vs. control inputs.\n"
+            "• Avoid false positives: verify if telemetry briefly dropped due to mode, arming, or intentional user behavior.\n"
 
             "### Communication Style\n"
             "• Be concise, clear, and structured.\n"
-            "• Start with a <b>one-sentence summary</b> of the key finding (or lack thereof).\n"
+            "• Start with a one-sentence summary of the key finding (or lack thereof).\n"
             "• Cite telemetry field names, values, and precise UTC timestamps to justify observations.\n"
             "• Never invent values. Only discuss what's present in the data.\n"
             "• If uncertain, ask for more data rather than speculating.\n\n"

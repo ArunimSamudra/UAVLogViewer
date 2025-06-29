@@ -1,6 +1,6 @@
 from typing import Any, Optional
 from langchain_openai import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
 import os
 
 from agents.agents import Agent

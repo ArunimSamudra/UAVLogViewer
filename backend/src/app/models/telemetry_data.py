@@ -10,6 +10,5 @@ class TelemetryData(BaseModel):
     """Holds one DataFrame per MAVLink message type."""
     by_type: Dict[str, pd.DataFrame]
 
-    # ------------- helpers -------------
     def get_df(self, mtype: str) -> Optional[pd.DataFrame]:
         return self.by_type.get(mtype)

@@ -11,9 +11,14 @@
             <a :href="'/uploaded/' + url" class="section" target="_blank"><i class="fas fa-download"></i> Download</a>
         </li>
         <div @click="browse" @dragover.prevent @drop="onDrop" id="drop_zone"
-        v-if="file==null && uploadpercentage===-1  && !sampleLoaded">
-            <p>Drop *.tlog or *.bin file here or click to browse</p>
-            <input @change="onChange" id="choosefile" style="opacity: 0;" type="file">
+        v-if="file==null && uploadpercentage==-1 && !sampleLoaded && !isUploading"
+        :class="{ 'uploading': isUploading }">
+            <p v-if="!isUploading">Drop *.tlog or *.bin file here or click to browse</p>
+            <div v-else class="uploading-message">
+                <div class="spinner"></div>
+                <p>Processing your file...</p>
+            </div>
+            <input @change="onChange" id="choosefile" style="opacity: 0;" type="file" :disabled="isUploading">
         </div>
         <!--<b-form-checkbox @change="uploadFile()" class="uploadCheckbox" v-if="file!=null && !uploadStarted"> Upload
         </b-form-checkbox>-->
@@ -48,6 +53,7 @@ export default {
             uploadpercentage: -1,
             sampleLoaded: false,
             shared: false,
+            isUploading: false,
             url: null,
             transferMessage: '',
             state: store,
@@ -211,6 +217,17 @@ export default {
         // New method for API upload
         async uploadToApi() {
             console.log('Uploading to API...')
+            this.isUploading = true;
+            
+            // Emit processing message using global event bus only
+            const processingPayload = {
+                message: 'Processing your file. This may take a moment...',
+                role: 'assistant',
+                timestamp: new Date().toLocaleTimeString(),
+                isProcessing: true
+            };
+            this.$root.$emit('file-uploaded', processingPayload);
+            
             const formData = new FormData();
             formData.append('file', this.file);
             
@@ -231,7 +248,8 @@ export default {
                     message: data.message,  // Show this in chat
                     role: 'assistant',
                     timestamp: new Date().toLocaleTimeString(),
-                    sessionId: data.session_id
+                    sessionId: data.session_id,
+                    isProcessing: false
                 };
                 // Emit locally (for Sidebar)
                 this.$emit('file-uploaded', payload);
@@ -240,10 +258,16 @@ export default {
                 
             } catch (error) {
                 console.error('Error uploading to API:', error);
-                const errorPayload = { message: 'Failed to process file with AI. Please try again.' };
+                const errorPayload = { 
+                    message: 'Failed to process file with AI. Please try again.',
+                    role: 'assistant',
+                    timestamp: new Date().toLocaleTimeString(),
+                    isProcessing: false
+                };
                 this.$emit('upload-error', errorPayload);
                 this.$root.$emit('upload-error', errorPayload);
             } finally {
+                this.isUploading = false;
                 console.log("Upload chatbot file finally");
             }
         },
@@ -346,4 +370,37 @@ export default {
         margin-left: 20px;
     }
 
+    .uploading-message {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        color: #666;
+    }
+
+    .spinner {
+        width: 30px;
+        height: 30px;
+        border: 3px solid rgba(0, 0, 0, 0.1);
+        border-radius: 50%;
+        border-top-color: #3498db;
+        animation: spin 1s ease-in-out infinite;
+        margin-bottom: 10px;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    #drop_zone.uploading {
+        cursor: not-allowed;
+        opacity: 0.7;
+        background-color: #f8f9fa;
+    }
+
+    #drop_zone.uploading p {
+        margin: 0;
+        text-align: center;
+    }
 </style>

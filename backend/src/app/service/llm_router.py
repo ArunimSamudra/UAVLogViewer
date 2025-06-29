@@ -37,6 +37,9 @@ SYSTEM = SystemMessage(
     content=(
         "You are Falcon-Router, an expert in ArduPilot flight log telemetry. "
         "Your job is to select the *smallest* set of MAVLink message types "
+        "based on the user's current question and recent conversation context. "
+        "Focus primarily on the current question, and only refer to recent messages "
+        "if they provide necessary context to understand the current query."
         "required to answer a user's question based on available data.\n\n"
         "Use the function tool only to return the message types — no commentary.\n\n"
         "Reference this documentation for message definitions:\n"
@@ -59,9 +62,24 @@ REFINER_SYSTEM = SystemMessage(
 )
 
 @lru_cache(maxsize=256)
-def infer_message_types_llm(question: str, types: FrozenSet[str]) -> Set[str]:
-    user = HumanMessage(content=question)
-
+def infer_message_types_llm(question: str, recent_user_msgs: tuple[str, ...], types: FrozenSet[str]) -> Set[str]:
+    """Determine relevant MAVLink message types for a given question and context.
+    
+    Args:
+        question: The user's question
+        recent_user_msgs: Tuple of recent user messages (must be a tuple for caching)
+        types: FrozenSet of available message types
+        
+    Returns:
+        Set of selected message types or {"ERR"} if none selected or error occurred
+    """
+    # Include recent messages as context if available
+    context = ""
+    if recent_user_msgs:
+        context = "\n\nRecent conversation context (for reference only, focus on the current question):\n"
+        context += "\n".join(f"- {msg}" for msg in recent_user_msgs[-2:])  # Limit to last 2 messages
+    
+    user = HumanMessage(content=f"Current question: {question}{context}")
     resp = _llm(messages=[SYSTEM, user], functions=[make_func_spec(types)])
 
     if resp.additional_kwargs.get("function_call"):
@@ -69,16 +87,22 @@ def infer_message_types_llm(question: str, types: FrozenSet[str]) -> Set[str]:
         payload = json.loads(resp.additional_kwargs["function_call"]["arguments"])
         selected = set(payload.get("message_types", [])) & types
         return selected or {"ERR"}
-    # Fallback if model doesn’t call the function
     return {"ERR"}
 
 
-def refine_types_with_llm(question: str, raw_types: list[str]) -> set[str]:
+def refine_types_with_llm(question: str, recent_user_msgs: tuple[str, ...], raw_types: list[str]) -> set[str]:
+    # Include recent messages as context if available
+    context = ""
+    if recent_user_msgs:
+        context = "\n\nRecent conversation context (for reference only, focus on the current question):\n"
+        context += "\n".join(f"- {msg}" for msg in recent_user_msgs[-2:])  # Limit to last 3 messages
+    
     user = HumanMessage(content=(
-        f"Original question: {question}\n\n"
+        f"Original question: {question}{context}\n\n"
         f"Candidate types: {', '.join(sorted(raw_types))}\n\n"
         "Return the refined list of message types that are *most relevant* and *minimally sufficient* "
-        "to answer the question. Respond ONLY with a comma-separated list (no commentary)."
+        "to answer the current question. Focus primarily on the current question and only use recent messages "
+        "if they provide necessary context. Respond ONLY with a comma-separated list (no commentary)."
     ))
     resp = _llm(messages=[REFINER_SYSTEM, user])
     if resp.content:
