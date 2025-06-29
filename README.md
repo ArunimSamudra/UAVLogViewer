@@ -57,7 +57,7 @@ A powerful web application for analyzing UAV (Unmanned Aerial Vehicle) telemetry
 2. In a new terminal, start the frontend:
    ```bash
    cd ../../..  # Back to project root
-   npm run serve
+   npm run dev
    ```
    The frontend will be available at `http://localhost:8080`
 
